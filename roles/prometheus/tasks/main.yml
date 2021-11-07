@@ -1,19 +1,67 @@
----
-# tasks file for roles/prometheus
-- name: update and install prometheus
-  apt:
-    name: prometheus
-    state: latest
-    update_cache: yes
-    cache_valid_time: 3600
-- name: prometheus args
-  template:
-    src: prometheus.j2
-    dest: /etc/default/prometheus
-    mode: 0644
-    owner: root
-    group: root
+- name: create prometheus user
+  user:
+    name: 'prometheus'
+    append: true
+    shell: /usr/sbin/nologin
+    system: true
+    create_home: false
+- name: create prometheus config dir
+  file:
+    path: "{{ prometheus_dir_configuration }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+
+- name: promtheus VarLibDir onfig dir
+  file:
+    path: /var/lib/prometheus
+    state: directory
+    owner: prometheus
+    group: prometheus
+  
+- name: download and unzip prometheus if not exist
+  unarchive:
+    src: "https://github.com/prometheus/prometheus/releases/download/v2.1.0/prometheus-2.1.0.linux-amd64.tar.gz"
+    dest: /tmp/
+    remote_src: yes
+    validate_certs: no
+- name: move the prometheus binary to the final destination
+  copy:
+    src: /tmp/prometheus-2.1.0.linux-amd64/prometheus
+    dest: /usr/local/bin
+    owner: prometheus
+    group: prometheus
+    mode: 0755
+    remote_src: yes
+- name: move the promtool binary to the final destination
+  copy:
+    src: /tmp/prometheus-2.1.0.linux-amd64/promtool
+    dest: /usr/local/bin
+    owner: prometheus
+    group: prometheus
+    mode: 0755
+    remote_src: yes
+- name: move the console file
+  copy:
+    src: /tmp/prometheus-2.1.0.linux-amd64/consoles
+    dest: /etc/prometheus
+    owner: "prometheus"
+    group: "prometheus"
+    mode: 0755
+    remote_src: yes
+- name: move the console_libraries file
+  copy:
+    src: /tmp/prometheus-2.1.0.linux-amd64/console_libraries
+    dest: /etc/prometheus
+    owner: "prometheus"
+    group: "prometheus"
+    mode: 0755
+    remote_src: yes
   notify: restart_prometheus
+- name: clean
+  file:
+    path: /tmp/prometheus-2.1.0.linux-amd64/
+    state: absent
 - name: prometheus configuration file
   template:
     src: prometheus.yml.j2
@@ -21,8 +69,16 @@
     mode: 0755
     owner: prometheus
     group: prometheus
+- name: install service
+  template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    owner: root
+    group: root
+    mode: 0755
   notify: reload_prometheus
-- name: start prometheus
+- meta: flush_handlers
+- name: service always started
   systemd:
     name: prometheus
     state: started
